@@ -8,40 +8,50 @@ import java.io.InputStreamReader;
 
 public class TCPClient {
      public static void main(String[] args) {
-             try{
-                 //InetAddress aHost = InetAddress.getByName(args[0]);
-                 //int aPort = Integer.parseInt(args[1]);
+         try {
+             int jobID = 0;
 
-                 Socket s = new Socket("127.0.0.1", 50000);
-                 DataOutputStream dout = new
-                DataOutputStream(s.getOutputStream());
-                 BufferedReader bin = new BufferedReader(new
-                InputStreamReader(s.getInputStream()));
+            Socket s = new Socket("localhost", 50000);
+            BufferedReader in = new BufferedReader(new
+            InputStreamReader(s.getInputStream()));
+            DataOutputStream out = new
+            DataOutputStream(s.getOutputStream());
 
-                 //DataInputStream din = new
-                DataInputStream(s.getInputStream());
+            out.write(("HELO\n").getBytes());
+            out.flush();
+            System.out.println("SENT: HELO");
 
+            String str = in.readLine();
+            System.out.println("RCVD: "+str);
 
-                 System.out.println("Target IP: " + s.getInetAddress() + "Target Port: " + s.getPort());
-                 System.out.println("Local IP: " + s.getLocalAddress() + "Local Port: " + s.getLocalPort());
+            String username = System.getProperty("user.name");
+            out.write(("AUTH " + username + "\n").getBytes());
 
+            str = in.readLine();
+            System.out.println("RCVD: " + str);
 
+            out.write(("REDY\n").getBytes());
+            out.flush();
+            str = in.readLine();
+            System.out.println("RCVD: " + str);
 
-                 dout.write(("HELO\n").getBytes());
-                 dout.flush();
-                 System.out.println("SENT: HELO ");
+            if (str.startsWith("JOBN")) {
+                String[] jobInfo = str.split(" ");
+                jobID = Integer.parseInt(jobInfo[2]);
+                System.out.println("Job ID: " + jobID);
+             }
 
+            out.write(("QUIT\n").getBytes());
+            out.flush();
+            str = in.readLine();
+            System.out.println("RCVD: " + str);
 
-                 String str = bin.readLine();
-                 System.out.println("RCVD: "+str);
+            in.close();
+            out.close();
+            s.close();
 
-
-                 bin.close();
-                 dout.close();
-                 s.close();
-
-                 }
-             catch(Exception e ){System.out.println(e);}
-         }
-
-}
+        } catch(Exception e) {
+            System.out.println(e);
+        }
+     }
+}   

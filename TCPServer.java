@@ -12,6 +12,7 @@ public class TCPServer {
          System.out.println("Port Number: " + aPort);
          ServerSocket ss = new ServerSocket(aPort);
          while(true){
+
              try{
                  Socket s = ss.accept();
                  DataInputStream din = new DataInputStream(s.getInputStream());
@@ -38,7 +39,11 @@ public class TCPServer {
                  dout.close();
                  s.close();
              }
-             catch(Exception e) {System.out.println(e);}
-             }
+
+             catch(Exception e) {System.out.println(e);
+            }
+             
+
          }
-     }
+    }
+}
