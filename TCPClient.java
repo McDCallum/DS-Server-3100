@@ -1,115 +1,133 @@
-import java.net.Socket;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.IOException;
+import java.io.*;
+import java.net.*;
 
 public class Client {
-     private static Socket server;
-     private static DataOutputStream out;
-     private static BufferedReader in;
-     private static String serverMessage;
-
      public static void main(String[] args) {
-         try {
-             server = new Socket("localhost", 50000);
-             out = new DataOutputStream(server.getOutputStream());
-             in = new BufferedReader(new InputStreamReader(server.getInputStream()));
-             String username = System.getProperty("user.name");
 
-             // Variables for tracking largest server
-             int serverCount = 0;
-             int serverCoreSize = 0;
-             String largestServerType = "";
-             int largestServerCount = 0;
-             int coreSize = 0;
-             String serverType = "";
-             String[] jobDetails;
+     try {
+         Socket socket = new Socket("localhost", 50000);
+         BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+         DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
 
-             // Handshake Section
-             sendMsg("HELO");
-             System.out.println("SENT: HELO");
-             String response = in.readLine();
+         // Send HELO message
+         outputStream.write(("HELO\n").getBytes());
+         String response = reader.readLine();
+         outputStream.flush();
 
-             // Check that the server is running and responds 'helo'
-             System.out.println("RCVD: " + response);
+         // Send AUTH message
+         String username = System.getProperty("user.name");
+         outputStream.write(("AUTH " + username + "\n").getBytes());
+         response = reader.readLine();
+         outputStream.flush();
 
-             sendMsg("AUTH " + username);
-             response = in.readLine();
-             System.out.println("RCVD: " + response);
+         // Request job
+         outputStream.write(("REDY\n").getBytes());
+         response = reader.readLine();
 
-             sendMsg("REDY");
-             System.out.println("SENT: REDY");
-             response = in.readLine();
-             System.out.println("RCVD: " + response);
+         if (response.equals("NONE")) {
+             // No available jobs, quit
+             outputStream.write(("QUIT\n").getBytes());
+             response = reader.readLine();
+             outputStream.flush();
 
-             // while there are still jobs being sent from the server
-             while (!response.equals("NONE")) {
-                 // while still receiving jobs from the server
-                 if (response.startsWith("JOBN")) {
-                     // loop through finding the largest server only once
-                     boolean cycle = true;
-                     while (cycle) {
-                         // split the jobDetails into an array of strings
-                         jobDetails = response.split(" ");
-                         System.out.println(jobDetails);
+             outputStream.close();
+             socket.close();
+         }
 
-                         sendMsg("GETS All");
-                         response = in.readLine();
-                         System.out.println(response);
-                         String[] dataDetails = response.split(" ");
-                         int nRecs = Integer.parseInt(dataDetails[1]);
-                         int recSize = Integer.parseInt(dataDetails[2]);
-                         sendMsg("OK");
+         // Split job details
+         String[] splitJob = response.split(" ");
+         int jobID = Integer.parseInt(splitJob[2]);
+         outputStream.flush();
 
-                         for (int i = 0; i < nRecs; i++) {
-                             response = in.readLine();
-                             System.out.println(response);
-                             String[] serverDetails = response.split(" ");
-                             serverType = serverDetails[0];
-                             serverCount = Integer.parseInt(serverDetails[1]);
-                             serverCoreSize = Integer.parseInt(serverDetails[4]);
+         // Get number of records
+         outputStream.write(("GETS All\n").getBytes());
+         response = reader.readLine();
+         String[] split = response.split(" ");
+         int records = Integer.parseInt(split[1]);
+         outputStream.flush();
 
-                             if (serverCoreSize > coreSize) {
-                                 coreSize = serverCoreSize;
-                                 largestServerCount = serverCount;
-                                 largestServerType = serverType;
-                             }
-                         }
-                         cycle = false;
-                     }
+         // Confirm receipt of records
+         outputStream.write(("OK\n").getBytes());
+         int cpu = 0;
+         String serverType = null;
+         int serverID = 0;
+         int numServersLargestType = 0;
 
-                     System.out.println("***********");
-                     System.out.println(largestServerType);
-                     System.out.println("Found largest server ^");
-                     sendMsg("OK");
+         // Find largest server
+         String previousServerType = null;
+         for (int i = 0; i < records; i++) {
+             response = reader.readLine();
+             String[] splitStr = response.split(" ");
+             int strCPU = Integer.parseInt(splitStr[4]);
+             String type = splitStr[0];
+             if (strCPU > cpu) {
+                 cpu = strCPU;
+                 serverType = type;
+         }
 
-                     // schedule the jobs
-                     System.out.println("largest serverCount below");
-                     System.out.println(largestServerCount);
-                     for (int i = 0; i <= largestServerCount; i++) {
-                         sendMsg("SCHD " + jobDetails[2] + " " + largestServerType + " " + i);
-                         System.out.println(jobDetails[2] + " " + largestServerType + " " + i);
-                         response = in.readLine();
-                         System.out.println(response);
-                     }
-                 }
+         // Increase number of servers of largest type
+         if (serverType.equals(type) && cpu == strCPU) {
+             if (serverType.equals(previousServerType)) {
+                 numServersLargestType++;
+             } else {
+                 numServersLargestType = 1;
+                 previousServerType = type;
+             }
+         }
+
+         outputStream.flush();
+         }
+
+         // Confirm number of servers of largest type
+         outputStream.write(("OK\n").getBytes());
+         response = reader.readLine();
+         outputStream.flush();
+
+         // Schedule first job
+         outputStream.write(("SCHD " + jobID + " " + serverType + " " + serverID + "\n").getBytes());
+         serverID++;
+         if (serverID >= numServersLargestType) {
+             serverID = 0;
+         }
+         response = reader.readLine();
+         outputStream.flush();
+
+         // Schedule all other jobs
+         while (!response.equals("NONE")) {
+             outputStream.write(("REDY\n").getBytes());
+             response = reader.readLine();
+
+             if (response.equals("NONE")) {
+                 break;
              }
 
-             sendMsg("QUIT");
-             response = in.readLine();
-             System.out.println(response);
-             System.out.println("done");
+             splitJob = response.split(" ");
+             String command = splitJob[0];
+             if (command.equals("JOBN")) {
+                 jobID = Integer.parseInt(splitJob[2]);
+                 outputStream.flush();
 
-             server.close();
-         } catch (IOException e) {
-             e.printStackTrace();
+                 outputStream.write(("SCHD " + jobID + " " + serverType + " " + serverID + "\n").getBytes());
+                 serverID++;
+                 if (serverID >= numServersLargestType) {
+                     serverID = 0;
+                 }
+             response = reader.readLine();
+             outputStream.flush();
+             }
          }
+
+         // Quit
+         outputStream.write(("QUIT\n").getBytes());
+         response = reader.readLine();
+         outputStream.flush();
+
+         outputStream.close();
+         socket.close();
+
+     } catch (Exception e) {
+         System.out.println(e);
      }
 
-     public static void sendMsg(String message) throws IOException {
-         out.write((message + "\n").getBytes());
-         out.flush();
      }
 }
